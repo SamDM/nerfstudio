@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import os
 import socket
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Tuple
 
@@ -58,20 +57,6 @@ def get_viewer_url(websocket_port: int) -> str:
 
 class IOChangeException(Exception):
     """Basic camera exception to interrupt viewer"""
-
-
-class SetTrace:
-    """Basic trace function"""
-
-    def __init__(self, func):
-        self.func = func
-
-    def __enter__(self):
-        sys.settrace(self.func)
-        return self
-
-    def __exit__(self, ext_type, exc_value, traceback):
-        sys.settrace(None)
 
 
 def is_port_open(port: int):

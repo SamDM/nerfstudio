@@ -114,6 +114,8 @@ class RenderStateMachine(threading.Thread):
             cam_msg: the camera message to render
         """
 
+        self.check_interrupt()
+
         # initialize the camera ray bundle
         viewer_utils.update_render_aabb(
             crop_viewport=self.viewer.control_panel.crop_viewport,
@@ -159,6 +161,8 @@ class RenderStateMachine(threading.Thread):
         )
         camera = camera.to(self.viewer.get_model().device)
 
+        self.check_interrupt()
+
         with self.viewer.train_lock if self.viewer.train_lock is not None else contextlib.nullcontext():
             camera_ray_bundle = camera.generate_rays(camera_indices=0, aabb_box=self.viewer.get_model().render_aabb)
 
@@ -180,6 +184,9 @@ class RenderStateMachine(threading.Thread):
                     with torch.no_grad():
                         outputs = self.viewer.get_model().get_outputs_for_camera_ray_bundle(camera_ray_bundle)
                 self.viewer.get_model().train()
+
+        self.check_interrupt()
+
         num_rays = len(camera_ray_bundle)
         render_time = vis_t.duration
         if writer.is_initialized():
@@ -202,8 +209,7 @@ class RenderStateMachine(threading.Thread):
                 continue
             self.state = self.transitions[self.state][action.action]
             try:
-                with viewer_utils.SetTrace(self.check_interrupt):
-                    outputs = self._render_img(action.cam_msg)
+                outputs = self._render_img(action.cam_msg)
             except viewer_utils.IOChangeException:
                 # if we got interrupted, don't send the output to the viewer
                 continue
@@ -212,15 +218,13 @@ class RenderStateMachine(threading.Thread):
             if self.state == "low_static":
                 self.action(RenderAction("static", action.cam_msg))
 
-    def check_interrupt(self, frame, event, arg):  # pylint: disable=unused-argument
+    def check_interrupt(self):  # pylint: disable=unused-argument
         """Raises interrupt when flag has been set and not already on lowest resolution.
         Used in conjunction with SetTrace.
         """
-        if event == "line":
-            if self.interrupt_render_flag:
-                self.interrupt_render_flag = False
-                raise viewer_utils.IOChangeException
-        return self.check_interrupt
+        if self.interrupt_render_flag:
+            self.interrupt_render_flag = False
+            raise viewer_utils.IOChangeException
 
     def _send_output_to_viewer(self, outputs: Dict[str, Any]):
         """Chooses the correct output and sends it to the viewer
